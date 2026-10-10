@@ -1,6 +1,5 @@
 import pandas as pd
-
-from src.models import CosineItemInvoice
+from src.models import CosineItemCustomer, CosineItemInvoice, WithoutItems
 
 
 def make_train():
@@ -32,3 +31,17 @@ def test_min_count_filters_rare_items():
     rare = pd.DataFrame([("6", "E")], columns=["Invoice", "StockCode"])
     model = CosineItemInvoice(min_count=2).fit(pd.concat([make_train(), rare]))
     assert "E" not in model.index
+
+def test_item_customer_skips_rows_without_customer():
+    rows = [("1", "A", "c1"), ("1", "B", "c1"), ("2", "A", "c2"), ("2", "B", "c2"),
+            ("3", "C", None)]
+    df = pd.DataFrame(rows, columns=["Invoice", "StockCode", "Customer ID"])
+    model = CosineItemCustomer().fit(df)
+    assert "C" not in model.index  # dòng thiếu Customer ID bị bỏ
+    assert model.recommend(["A"], 1) == ["B"]
+
+
+def test_without_items_removes_group():
+    model = CosineItemInvoice().fit(make_train())
+    assert WithoutItems(model, {"B"}).recommend(["A"], 5) == []
+    assert WithoutItems(model, {"A"}, drop_query=True).recommend(["A"], 5) == []

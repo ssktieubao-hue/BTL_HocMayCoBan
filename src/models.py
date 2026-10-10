@@ -26,17 +26,21 @@ class PopularityBaseline:
         return out
 
 
-class CosineItemInvoice:
-    """Cosine giữa các vector nhị phân item-invoice (học từ train).
+class CosineBinary:
+    """Cosine giữa các vector nhị phân: mỗi sản phẩm là một vector theo 'nhóm'
+    (hóa đơn hoặc khách hàng, tùy lớp con). Học từ train.
 
-    min_count: chỉ giữ sản phẩm xuất hiện trong ít nhất min_count hóa đơn của train.
+    min_count: chỉ giữ sản phẩm xuất hiện trong ít nhất min_count nhóm của train.
     """
+
+    group_col = "Invoice"
 
     def __init__(self, min_count: int = 1):
         self.min_count = min_count
 
     def fit(self, train: pd.DataFrame):
-        pairs = train.drop_duplicates(["Invoice", "StockCode"])[["Invoice", "StockCode"]]
+        g = self.group_col
+        pairs = train.dropna(subset=[g]).drop_duplicates([g, "StockCode"])[[g, "StockCode"]]
         freq = pairs["StockCode"].value_counts()
         items = sorted(freq[freq >= self.min_count].index)
         pairs = pairs[pairs["StockCode"].isin(set(items))]
@@ -44,7 +48,7 @@ class CosineItemInvoice:
         self.items = items
         self.index = {s: i for i, s in enumerate(items)}
         rows = pairs["StockCode"].map(self.index).to_numpy()
-        cols = pd.factorize(pairs["Invoice"])[0]
+        cols = pd.factorize(pairs[g])[0]
         X = csr_matrix(
             (np.ones(len(pairs), dtype=np.float32), (rows, cols)),
             shape=(len(items), cols.max() + 1),
@@ -61,3 +65,27 @@ class CosineItemInvoice:
         scores[idx] = 0.0  # không gợi ý món đã có trong giỏ
         order = np.argsort(-scores, kind="stable")[:k]
         return [self.items[i] for i in order if scores[i] > 0]
+
+
+class CosineItemInvoice(CosineBinary):
+    group_col = "Invoice"
+
+
+class CosineItemCustomer(CosineBinary):
+    """Bỏ các dòng thiếu Customer ID khi học."""
+
+    group_col = "Customer ID"
+
+
+class WithoutItems:
+    """Bọc một mô hình để loại một nhóm sản phẩm khỏi gợi ý (và tùy chọn khỏi đầu vào)."""
+
+    def __init__(self, model, banned, drop_query: bool = False):
+        self.model, self.banned, self.drop_query = model, set(banned), drop_query
+
+    def recommend(self, query, k):
+        q = [s for s in query if s not in self.banned] if self.drop_query else list(query)
+        if not q:
+            return []
+        recs = self.model.recommend(q, k + len(self.banned))
+        return [s for s in recs if s not in self.banned][:k]
