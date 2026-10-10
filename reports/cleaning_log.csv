@@ -1,0 +1,7 @@
+﻿quy_tac,dong_bi_loai,con_lai
+Dữ liệu thô,0,1067371
+Hóa đơn hủy (Invoice bắt đầu bằng C),19494,1047877
+Quantity <= 0,3457,1044420
+Price <= 0,2750,1041670
+"StockCode không phải sản phẩm (POST, M, D, BANK CHARGES...)",4794,1036876
+Thiếu Description,0,1036876
