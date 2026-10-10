@@ -36,3 +36,5 @@
   thật và gợi ý; Hit-rate theo món bị giấu thuộc/không thuộc G; bỏ G khỏi gợi ý và bỏ G khỏi
   cả đầu vào, so trên cùng tập ca có món bị giấu ngoài G. Chênh lệch nhỏ hơn ci95 thì kết
   luận "chưa thấy ảnh hưởng".
+- Mô hình chính: item–invoice, min_count = 1, K = 10, không lọc nhóm G.
+- Kết quả test và phân tích lỗi: xem reports/test_results.md.
