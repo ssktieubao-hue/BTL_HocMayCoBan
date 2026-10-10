@@ -38,6 +38,16 @@ class SimilarItemsResponse(BaseModel):
     note: str | None = None
 
 
+class ErrorBody(BaseModel):
+    code: str
+    message: str
+    suggestions: list[str] | None = None
+
+
+class ErrorResponse(BaseModel):
+    error: ErrorBody
+
+
 def create_app(path: Path = ARTIFACT) -> FastAPI:
     if not Path(path).exists():
         raise FileNotFoundError("Chưa có model. Chạy: python -m src.build_artifact")
@@ -67,7 +77,8 @@ def create_app(path: Path = ARTIFACT) -> FastAPI:
     def health():
         return {"status": "ok", "n_items": len(items), "built_on": meta["built_on"]}
 
-    @app.get("/api/search", response_model=list[Product])
+    @app.get("/api/search", response_model=list[Product],
+             responses={422: {"model": ErrorResponse}})
     def search(q: str = Query(...), limit: int = 10):
         q = q.strip()
         if not 2 <= len(q) <= 60:
@@ -80,7 +91,8 @@ def create_app(path: Path = ARTIFACT) -> FastAPI:
         hits.sort(key=lambda i: (not items[i].lower().startswith(ql), -art["invoice_count"][i]))
         return [product(i) for i in hits[:limit]]
 
-    @app.get("/api/similar-items", response_model=SimilarItemsResponse)
+    @app.get("/api/similar-items", response_model=SimilarItemsResponse,
+             responses={404: {"model": ErrorResponse}, 422: {"model": ErrorResponse}})
     def similar_items(stock_code: str = Query(...), k: int = 10):
         if not stock_code or len(stock_code) > 20 or stock_code != stock_code.strip():
             raise ApiError(422, "invalid_stock_code",
