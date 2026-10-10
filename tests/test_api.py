@@ -64,3 +64,8 @@ def test_search_ranks_by_popularity(client):
 
 def test_search_rejects_short_query(client):
     assert client.get("/api/search", params={"q": "b"}).status_code == 422
+
+def test_openapi_documents_error_schema(client):
+    spec = client.get("/openapi.json").json()
+    r422 = spec["paths"]["/api/similar-items"]["get"]["responses"]["422"]
+    assert "ErrorResponse" in r422["content"]["application/json"]["schema"]["$ref"]
