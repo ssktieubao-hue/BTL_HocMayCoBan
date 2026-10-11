@@ -2,15 +2,19 @@
 
   python -m uvicorn app.main:create_app --factory --reload
 """
+import csv
 import json
 from pathlib import Path
 
 from fastapi import FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 ARTIFACT = Path(__file__).resolve().parents[1] / "models" / "item_invoice_cosine.json"
+REPORTS = Path(__file__).resolve().parents[1] / "reports"
+STATIC = Path(__file__).resolve().parent / "static"
 
 
 class ApiError(Exception):
@@ -48,7 +52,7 @@ class ErrorResponse(BaseModel):
     error: ErrorBody
 
 
-def create_app(path: Path = ARTIFACT) -> FastAPI:
+def create_app(path: Path = ARTIFACT, reports: Path = REPORTS) -> FastAPI:
     if not Path(path).exists():
         raise FileNotFoundError("Chưa có model. Chạy: python -m src.build_artifact")
     art = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -116,4 +120,21 @@ def create_app(path: Path = ARTIFACT) -> FastAPI:
         return SimilarItemsResponse(stock_code=stock_code, description=p.description, k=k,
                                     returned=len(recs), recommendations=recs, note=note)
 
+    @app.get("/api/dashboard")
+    def dashboard():
+        def rows(name):
+            f = Path(reports) / name
+            if not f.exists():
+                return []
+            with f.open(encoding="utf-8-sig") as fh:
+                return list(csv.DictReader(fh))
+
+        popular = [{**product(index[s]).model_dump(),
+                    "share": round(art["invoice_count"][index[s]] / meta["n_invoices"], 4)}
+                   for s in art["popular"][:10]]
+        return {"meta": meta, "test_results": rows("final_test.csv"),
+                "error_analysis": rows("error_analysis.csv"), "popular": popular}
+
+    # Phải đặt sau mọi route /api/..., nếu không trang tĩnh sẽ che mất API
+    app.mount("/", StaticFiles(directory=STATIC, html=True), name="static")
     return app

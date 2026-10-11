@@ -9,16 +9,19 @@ from app.main import create_app
 @pytest.fixture()
 def client(tmp_path):
     art = {
-        "meta": {"k_max": 2, "built_on": "2026-10-10"},
+        "meta": {"k_max": 2, "built_on": "2026-10-10", "n_invoices": 100},
         "items": ["A1", "B2", "C3"],
         "descriptions": ["RED BAG", "BLUE BAG", "GREEN MUG"],
         "invoice_count": [30, 20, 5],
         "neighbors": [[1, 2], [0], []],
         "scores": [[0.8, 0.1], [0.8], []],
+        "popular": ["A1", "B2"],
     }
     path = tmp_path / "m.json"
     path.write_text(json.dumps(art), encoding="utf-8")
-    return TestClient(create_app(path))
+    (tmp_path / "final_test.csv").write_text("model,K,hit_rate\nitem_invoice,10,0.2\n",
+                                             encoding="utf-8")
+    return TestClient(create_app(path, reports=tmp_path))
 
 
 def test_health(client):
@@ -65,7 +68,21 @@ def test_search_ranks_by_popularity(client):
 def test_search_rejects_short_query(client):
     assert client.get("/api/search", params={"q": "b"}).status_code == 422
 
+
 def test_openapi_documents_error_schema(client):
     spec = client.get("/openapi.json").json()
     r422 = spec["paths"]["/api/similar-items"]["get"]["responses"]["422"]
     assert "ErrorResponse" in r422["content"]["application/json"]["schema"]["$ref"]
+
+
+def test_dashboard(client):
+    d = client.get("/api/dashboard").json()
+    assert d["test_results"][0]["K"] == "10"
+    assert d["popular"][0] == {"stock_code": "A1", "description": "RED BAG",
+                               "invoice_count": 30, "share": 0.3}
+    assert d["error_analysis"] == []
+
+
+def test_home_page_is_served(client):
+    r = client.get("/")
+    assert r.status_code == 200 and "Gợi ý mua kèm" in r.text

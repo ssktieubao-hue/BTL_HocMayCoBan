@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gợi ý mua kèm</title>
+<style>
+body{font:15px/1.5 system-ui,sans-serif;max-width:960px;margin:0 auto;padding:16px;color:#222}
+nav button{padding:8px 14px;border:1px solid #ccc;background:#f6f6f6;cursor:pointer}
+nav button.on{background:#1a5fb4;color:#fff}
+section{display:none}section.on{display:block}
+table{border-collapse:collapse;width:100%;margin:8px 0}
+th,td{border:1px solid #ddd;padding:4px 8px;text-align:left}th{background:#f0f0f0}
+input{padding:6px}
+#hits button{display:block;width:100%;text-align:left;margin:2px 0;padding:4px 8px;cursor:pointer}
+#msg{color:#b00020;min-height:1.4em}
+pre{background:#f4f4f4;padding:8px;overflow:auto}
+</style>
+</head>
+<body>
+<h1>Gợi ý mua kèm</h1>
+<nav>
+<button data-t="intro" class="on">1. Giới thiệu và phạm vi</button>
+<button data-t="tool">2. Tìm và gợi ý</button>
+<button data-t="dash">3. Đánh giá và model card</button>
+</nav>
+
+<section id="intro" class="on">
+<h2>Công cụ làm gì</h2>
+<p>Nhập một sản phẩm, công cụ liệt kê các sản phẩm hay xuất hiện cùng nó trong cùng hóa đơn (độ giống cosine giữa các sản phẩm theo hóa đơn).</p>
+<h3>Phạm vi và giới hạn</h3>
+<ul>
+<li>Nguồn: UCI, Online Retail II (CC BY 4.0, DOI 10.24432/C5CG6D), hóa đơn của một cửa hàng bán lẻ trực tuyến tại Anh, 12/2009 đến 9/2011 dùng để học.</li>
+<li>Chỉ mô tả sản phẩm hay được mua cùng nhau. Không khẳng định quan hệ nhân quả, không dự đoán nhu cầu của từng khách. Customer ID không được hiển thị.</li>
+<li>Chỉ có sản phẩm xuất hiện trong dữ liệu huấn luyện; sản phẩm mới không có gợi ý.</li>
+<li>Đầu vào: mã sản phẩm (phân biệt hoa thường) và k, số sản phẩm gợi ý, là số nguyên từ 1 đến 50. Điểm cosine nằm trong khoảng 0 đến 1, càng cao càng hay xuất hiện cùng nhau; đó không phải xác suất mua.</li>
+</ul>
+<h3>Ví dụ API</h3>
+<pre>GET /api/similar-items?stock_code=85123A&amp;k=5
+{"stock_code":"85123A","description":"WHITE HANGING HEART T-LIGHT HOLDER","k":5,"returned":5,
+ "recommendations":[{"rank":1,"stock_code":"21733","description":"RED HANGING HEART T-LIGHT HOLDER","invoice_count":1518,"cosine":0.3964}, ...]}
+
+Lỗi: 404 {"error":{"code":"unknown_stock_code",...}}   422 {"error":{"code":"k_out_of_range",...}}</pre>
+<p>Tài liệu đầy đủ: <a href="/docs">/docs</a></p>
+</section>
+
+<section id="tool">
+<h2>Tìm sản phẩm và xem gợi ý</h2>
+<p>Tìm theo mã hoặc tên (2 đến 60 ký tự) rồi bấm vào một kết quả; hoặc nhập thẳng mã chính xác.</p>
+<input id="q" placeholder="vd: teacup hoặc 85123A"> <button id="bs">Tìm</button>
+<div id="hits"></div>
+<p>Mã sản phẩm <input id="code" size="10"> k (số sản phẩm gợi ý, 1 đến 50) <input id="k" type="number" value="10" style="width:70px"> <button id="br">Gợi ý</button></p>
+<p id="msg"></p>
+<h3 id="title"></h3><table id="recs"></table><p id="note"></p>
+</section>
+
+<section id="dash">
+<h2>Kết quả đánh giá trên tập test</h2>
+<p>Mỗi ca là một hóa đơn test với một sản phẩm bị giấu ngẫu nhiên; trúng nếu sản phẩm đó nằm trong K gợi ý đầu tiên (K là số sản phẩm gợi ý). Coverage là tỷ lệ danh mục được gợi ý ít nhất một lần. Dấu ± là khoảng tin cậy 95%.</p>
+<table id="metrics"></table>
+<h3>Hit-rate@10 theo nhóm (test)</h3><table id="errors"></table>
+<h3>10 sản phẩm phổ biến nhất (theo số hóa đơn)</h3><table id="popular"></table>
+<h2>Model card</h2>
+<p id="built"></p>
+<ul>
+<li>Mục đích: gợi ý sản phẩm hay được mua cùng để khám phá danh mục. Không dùng để suy ra nguyên nhân mua hàng hay hồ sơ cá nhân.</li>
+<li>Mô hình: cosine giữa các vector nhị phân hóa đơn của mỗi sản phẩm; không lọc theo tần suất; không dùng Customer ID. Baseline so sánh: top sản phẩm bán chạy.</li>
+<li>Giới hạn: dữ liệu chủ yếu của khách tại Anh và chỉ gồm năm 2009 đến 2011; gợi ý hay là biến thể cùng dòng sản phẩm; yếu hơn ở giỏ hàng lớn; không gợi ý được sản phẩm mới; nhóm sản phẩm rất phổ biến chiếm nhiều lượt trúng; Hit-rate chỉ đo một sản phẩm bị giấu nên các gợi ý hợp lý khác bị tính là trượt.</li>
+</ul>
+</section>
+
+<script>
+const $=s=>document.querySelector(s), pct=x=>(100*x).toFixed(1)+'%';
+async function api(u){const r=await fetch(u),j=await r.json();if(!r.ok)throw j.error||{message:'Lỗi '+r.status};return j;}
+function tbl(sel,head,rows){
+  const t=$(sel);t.textContent='';
+  const add=(cells,tag)=>{const tr=t.insertRow();cells.forEach(c=>{const e=document.createElement(tag);e.textContent=c;tr.append(e);});};
+  if(head.length)add(head,'th');rows.forEach(r=>add(r,'td'));
+}
+const msg=t=>{$('#msg').textContent=t;};
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button,section').forEach(e=>e.classList.remove('on'));
+  b.classList.add('on');document.getElementById(b.dataset.t).classList.add('on');
+  if(b.dataset.t==='dash')dash();
+});
+async function search(){
+  const q=$('#q').value.trim(),box=$('#hits');box.textContent='';msg('');
+  if(q.length<2||q.length>60)return msg('Nhập 2 đến 60 ký tự để tìm theo mã hoặc tên sản phẩm.');
+  try{
+    const items=await api('/api/search?q='+encodeURIComponent(q)+'&limit=10');
+    if(!items.length)return msg('Không tìm thấy sản phẩm khớp "'+q+'".');
+    items.forEach(p=>{const b=document.createElement('button');b.textContent=p.stock_code+' – '+p.description;
+      b.onclick=()=>{$('#code').value=p.stock_code;recommend();};box.append(b);});
+  }catch(e){msg(e.message);}
+}
+async function recommend(){
+  const code=$('#code').value,k=Number($('#k').value);
+  tbl('#recs',[],[]);$('#title').textContent='';$('#note').textContent='';msg('');
+  if(!code)return msg('Chưa có mã sản phẩm: nhập mã hoặc tìm theo tên rồi bấm vào một kết quả.');
+  if(!Number.isInteger(k)||k<1||k>50)return msg('k phải là số nguyên từ 1 đến 50 (số sản phẩm gợi ý).');
+  try{
+    const r=await api('/api/similar-items?stock_code='+encodeURIComponent(code)+'&k='+k);
+    $('#title').textContent='Gợi ý mua kèm với '+r.stock_code+' – '+r.description;
+    tbl('#recs',['Hạng','Mã','Sản phẩm','Số hóa đơn chứa sản phẩm','Cosine (0 đến 1)'],
+      r.recommendations.map(x=>[x.rank,x.stock_code,x.description,x.invoice_count,x.cosine]));
+    $('#note').textContent=r.note||'';
+  }catch(e){msg(e.message+(e.suggestions&&e.suggestions.length?' Mã gần giống: '+e.suggestions.join(', ')+'.':''));}
+}
+$('#bs').onclick=search;$('#br').onclick=recommend;
+$('#q').onkeydown=e=>{if(e.key==='Enter')search();};
+async function dash(){
+  try{
+    const d=await api('/api/dashboard'),name={item_invoice:'Cosine item–invoice',top_popular:'Top bán chạy'};
+    tbl('#metrics',['Mô hình','K','Hit-rate','Coverage','Gợi ý hàng phổ biến','Số ca'],
+      d.test_results.map(r=>[name[r.model]||r.model,r.K,pct(+r.hit_rate)+' ±'+pct(+r.ci95),pct(+r.coverage),pct(+r.pop_share),r.n_cases]));
+    const dim={do_pho_bien_mon_bi_giau:'Độ phổ biến món bị giấu (số hóa đơn)',kich_thuoc_gio:'Kích thước giỏ (số sản phẩm)',thang:'Tháng'};
+    tbl('#errors',['Chiều','Nhóm','Số ca','Top bán chạy','Cosine'],
+      d.error_analysis.map(r=>[dim[r.chieu]||r.chieu,r.nhom,r.n_ca,pct(+r.hit_popular),pct(+r.hit_cosine)+' ±'+pct(+r.ci95_cosine)]));
+    tbl('#popular',['Mã','Sản phẩm','Số hóa đơn','Tỷ lệ hóa đơn'],d.popular.map(p=>[p.stock_code,p.description,p.invoice_count,pct(p.share)]));
+    $('#built').textContent='Model xây ngày '+d.meta.built_on+', học trên dữ liệu '+d.meta.data_from+' đến '+d.meta.data_to+' ('+d.meta.n_invoices+' hóa đơn, '+d.meta.n_items+' sản phẩm).';
+  }catch(e){$('#built').textContent=e.message;}
+}
+</script>
+</body>
+</html>
