@@ -86,3 +86,37 @@ def test_dashboard(client):
 def test_home_page_is_served(client):
     r = client.get("/")
     assert r.status_code == 200 and "Gợi ý mua kèm" in r.text
+
+
+def test_recommend_basket_ok(client):
+    r = client.post("/api/recommend-basket", json={"stock_codes": ["A1"], "k": 2})
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["basket"]) == 1
+    assert [x["stock_code"] for x in body["recommendations"]] == ["B2", "C3"]
+
+    # When basket has both A1 and B2, candidate C3 is recommended with score from A1
+    r2 = client.post("/api/recommend-basket", json={"stock_codes": ["A1", "B2"], "k": 2})
+    assert r2.status_code == 200
+    body2 = r2.json()
+    assert len(body2["basket"]) == 2
+    assert [x["stock_code"] for x in body2["recommendations"]] == ["C3"]
+
+
+def test_recommend_basket_get(client):
+    r = client.get("/api/recommend-basket", params={"stock_codes": "A1,B2", "k": 1})
+    assert r.status_code == 200
+    assert len(r.json()["recommendations"]) == 1
+    assert r.json()["recommendations"][0]["stock_code"] == "C3"
+
+
+def test_recommend_basket_unknown_code(client):
+    r = client.post("/api/recommend-basket", json={"stock_codes": ["A1", "UNKNOWN"], "k": 2})
+    assert r.status_code == 404
+    assert r.json()["error"]["code"] == "unknown_stock_code"
+
+
+def test_recommend_basket_empty_and_invalid(client):
+    assert client.post("/api/recommend-basket", json={"stock_codes": [], "k": 2}).status_code == 422
+    assert client.post("/api/recommend-basket", json={"stock_codes": ["A1"], "k": 0}).status_code == 422
+    assert client.post("/api/recommend-basket", json={"stock_codes": ["A1"], "k": 5}).status_code == 422
