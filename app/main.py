@@ -42,6 +42,19 @@ class SimilarItemsResponse(BaseModel):
     note: str | None = None
 
 
+class BasketRecommendationRequest(BaseModel):
+    stock_codes: list[str]
+    k: int = 10
+
+
+class BasketRecommendationResponse(BaseModel):
+    basket: list[Product]
+    k: int
+    returned: int
+    recommendations: list[Recommendation]
+    note: str | None = None
+
+
 class ErrorBody(BaseModel):
     code: str
     message: str
@@ -119,6 +132,57 @@ def create_app(path: Path = ARTIFACT, reports: Path = REPORTS) -> FastAPI:
         p = product(i)
         return SimilarItemsResponse(stock_code=stock_code, description=p.description, k=k,
                                     returned=len(recs), recommendations=recs, note=note)
+
+    @app.post("/api/recommend-basket", response_model=BasketRecommendationResponse,
+              responses={404: {"model": ErrorResponse}, 422: {"model": ErrorResponse}})
+    def recommend_basket(body: BasketRecommendationRequest):
+        raw_codes = [s.strip() for s in body.stock_codes if s and s.strip()]
+        if not raw_codes:
+            raise ApiError(422, "empty_basket", "Giỏ hàng phải có ít nhất một mã sản phẩm.")
+        if len(raw_codes) > 50:
+            raise ApiError(422, "basket_too_large", "Giỏ hàng chỉ hỗ trợ tối đa 50 sản phẩm mỗi lần gọi.")
+        if not 1 <= body.k <= k_max:
+            raise ApiError(422, "k_out_of_range",
+                           f"k phải là số nguyên từ 1 đến {k_max} (nhận được {body.k}).")
+
+        basket_items, unknown_codes, query_indices, query_set = [], [], [], set()
+        for s in raw_codes:
+            idx_s = index.get(s)
+            if idx_s is None:
+                unknown_codes.append(s)
+            elif s not in query_set:
+                query_set.add(s)
+                query_indices.append(idx_s)
+                basket_items.append(product(idx_s))
+
+        if unknown_codes:
+            sug = [c for c in items if any(c.lower().startswith(u.lower()) for u in unknown_codes)][:5]
+            raise ApiError(404, "unknown_stock_code",
+                           "Các mã sau không có trong mô hình: "
+                           + ", ".join(f"'{u}'" for u in unknown_codes) + " (mã phân biệt hoa thường).",
+                           suggestions=sug)
+
+        scores = {}
+        for qi in query_indices:
+            for nb, sc in zip(art["neighbors"][qi], art["scores"][qi]):
+                if items[nb] not in query_set:
+                    scores[nb] = scores.get(nb, 0.0) + sc
+
+        ranked = sorted(scores.items(), key=lambda x: (-x[1], -art["invoice_count"][x[0]]))[:body.k]
+        recs = [Recommendation(**product(j).model_dump(), rank=r, cosine=round(score, 4))
+                for r, (j, score) in enumerate(ranked, 1)]
+        note = None if len(recs) == body.k else (
+            f"Chỉ có {len(recs)} sản phẩm từng xuất hiện cùng các sản phẩm trong giỏ này.")
+
+        return BasketRecommendationResponse(basket=basket_items, k=body.k, returned=len(recs),
+                                            recommendations=recs, note=note)
+
+    @app.get("/api/recommend-basket", response_model=BasketRecommendationResponse,
+             responses={404: {"model": ErrorResponse}, 422: {"model": ErrorResponse}})
+    def recommend_basket_get(stock_codes: str = Query(..., description="Mã sản phẩm, cách nhau bằng dấu phẩy"),
+                             k: int = 10):
+        codes = [s.strip() for s in stock_codes.split(",") if s.strip()]
+        return recommend_basket(BasketRecommendationRequest(stock_codes=codes, k=k))
 
     @app.get("/api/dashboard")
     def dashboard():
